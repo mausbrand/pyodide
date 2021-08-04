@@ -16,7 +16,10 @@ all: check \
 	build/pyodide.asm.js \
 	build/pyodide.js \
 	build/console.html \
+	build/distutils.data \
 	build/packages.json \
+	$(if $(PYODIDE_BUILD), , "build/test.data") \
+	$(if $(PYODIDE_BUILD), , "build/test.html") \
 	build/webworker.js \
 	build/webworker_dev.js
 	echo -e "\nSUCCESS!"
@@ -53,6 +56,10 @@ build/pyodide.asm.js: \
 		-lproxyfs.js \
 		-lworkerfs.js \
 		--preload-file $(CPYTHONLIB)@/lib/python$(PYMAJOR).$(PYMINOR) \
+		$(if $(PYODIDE_BUILD), "", "--preload-file src/webbrowser.py@/lib/python$(PYMAJOR).$(PYMINOR)/webbrowser.py") \
+		$(if $(PYODIDE_BUILD), "", "--preload-file src/_testcapi.py@/lib/python$(PYMAJOR).$(PYMINOR)/_testcapi.py") \
+		$(if $(PYODIDE_BUILD), "", "--preload-file src/_testinternalcapi.py@/lib/python$(PYMAJOR).$(PYMINOR)/_testinternalcapi.py") \
+		$(if $(PYODIDE_BUILD), "", "--preload-file src/pystone.py@/lib/python$(PYMAJOR).$(PYMINOR)/pystone.py") \
 		--preload-file src/py/pyodide@/lib/python$(PYMAJOR).$(PYMINOR)/site-packages/pyodide \
 		--preload-file src/py/_pyodide@/lib/python$(PYMAJOR).$(PYMINOR)/site-packages/_pyodide \
 		--exclude-file "*__pycache__*" \
@@ -220,10 +227,8 @@ FORCE:
 check: $(UGLIFYJS)
 	./tools/dependency-check.sh
 
-
 minimal :
 	PYODIDE_PACKAGES+=",micropip" make
-
 
 debug :
 	EXTRA_CFLAGS+=" -D DEBUG_F" \

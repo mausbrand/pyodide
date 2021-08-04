@@ -33,7 +33,6 @@ crypt.py
 dataclasses.py
 decimal.py
 difflib.py
-distutils
 doctest.py
 dummy_threading.py
 _dummy_thread.py
