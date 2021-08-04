@@ -258,8 +258,8 @@ def test_run_python_async_toplevel_await(selenium):
         await pyodide.runPythonAsync(`
             from js import fetch
             resp = await fetch("packages.json")
-            json = await resp.json()
-            assert hasattr(json, "dependencies")
+            json = (await resp.json()).to_py()["packages"]
+            assert "micropip" in json
         `);
         """
     )
@@ -514,8 +514,10 @@ def test_fatal_error(selenium_standalone):
         x = re.sub("/lib/python.*/", "", x)
         x = re.sub("/lib/python.*/", "", x)
         x = re.sub("warning: no [bB]lob.*\n", "", x)
-        x = re.sub("Error: intentionally triggered fatal error!", "{}", x)
+        x = re.sub("Error: intentionally triggered fatal error!\n", "", x)
         x = re.sub(" +at .*\n", "", x)
+        x = re.sub(".*@https?://[0-9.:]*/.*\n", "", x)
+        x = x.replace("\n\n", "\n")
         return x
 
     assert (
@@ -526,7 +528,6 @@ def test_fatal_error(selenium_standalone):
                 Python initialization complete
                 Pyodide has suffered a fatal error. Please report this to the Pyodide maintainers.
                 The cause of the fatal error was:
-                {}
                 Stack (most recent call first):
                   File "<exec>", line 8 in h
                   File "<exec>", line 6 in g
@@ -571,3 +572,82 @@ def test_reentrant_error(selenium):
         """
     )
     assert caught
+
+
+@pytest.mark.skip_refcount_check
+@pytest.mark.skip_pyproxy_check
+def test_custom_stdin_stdout(selenium_standalone_noload):
+    selenium = selenium_standalone_noload
+    strings = [
+        "hello world",
+        "hello world\n",
+        "This has a \x00 null byte in the middle...",
+        "several\nlines\noftext",
+        "pyodidé",
+        "碘化物",
+        "🐍",
+    ]
+    selenium.run_js(
+        """
+        function* stdinStrings(){
+            for(let x of %s){
+                yield x;
+            }
+        }
+        let stdinStringsGen = stdinStrings();
+        function stdin(){
+            return stdinStringsGen.next().value;
+        }
+        self.stdin = stdin;
+        """
+        % strings
+    )
+    selenium.run_js(
+        """
+        self.stdoutStrings = [];
+        self.stderrStrings = [];
+        function stdout(s){
+            stdoutStrings.push(s);
+        }
+        function stderr(s){
+            stderrStrings.push(s);
+        }
+        let pyodide = await loadPyodide({
+            indexURL : './',
+            fullStdLib: false,
+            jsglobals : self,
+            stdin,
+            stdout,
+            stderr,
+        });
+        self.pyodide = pyodide;
+        globalThis.pyodide = pyodide;
+        """
+    )
+    outstrings = sum([s.removesuffix("\n").split("\n") for s in strings], [])
+    print(outstrings)
+    assert (
+        selenium.run_js(
+            """
+        return pyodide.runPython(`
+            [input() for x in range(%s)]
+            # ... test more stuff
+        `).toJs();
+        """
+            % len(outstrings)
+        )
+        == outstrings
+    )
+
+    [stdoutstrings, stderrstrings] = selenium.run_js(
+        """
+        pyodide.runPython(`
+            import sys
+            print("something to stdout")
+            print("something to stderr",file=sys.stderr)
+        `);
+        return [self.stdoutStrings, self.stderrStrings];
+        """
+    )
+    assert stdoutstrings == ["Python initialization complete", "something to stdout"]
+    assert stderrstrings == ["something to stderr"]

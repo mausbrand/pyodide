@@ -15,15 +15,14 @@ path_dirs = [
     str(base_dir / "pyodide-build"),
     str(base_dir / "docs/sphinx_pyodide"),
     str(base_dir / "src/py"),
-    str(base_dir / "packages/micropip/micropip"),
+    str(base_dir / "packages/micropip/src"),
 ]
 sys.path = path_dirs + sys.path
 
 # -- Project information -----------------------------------------------------
 
 project = "Pyodide"
-copyright = "2019, Mozilla"
-author = "Mozilla"
+copyright = "2019-2021, Pyodide contributors and Mozilla"
 
 import pyodide
 import micropip  # noqa
@@ -126,7 +125,7 @@ htmlhelp_basename = "Pyodidedoc"
 epub_exclude_files = ["search.html"]
 
 if "READTHEDOCS" in os.environ:
-    env = {"PYODIDE_BASE_URL": "https://cdn.jsdelivr.net/pyodide/dev/full/"}
+    env = {"PYODIDE_BASE_URL": "https://cdn.jsdelivr.net/pyodide/v0.18.0/full/"}
     os.makedirs("_build/html", exist_ok=True)
     res = subprocess.check_output(
         ["make", "-C", "..", "docs/_build/html/console.html"],
@@ -152,3 +151,4 @@ def delete_attrs(cls):
 
 delete_attrs(pyodide.webloop.WebLoop)
 delete_attrs(pyodide.webloop.WebLoopPolicy)
+delete_attrs(pyodide.console.PyodideConsole)

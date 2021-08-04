@@ -1,7 +1,7 @@
 /**
  * The main bootstrap code for loading pyodide.
  */
-import { Module } from "./module.js";
+import { Module, setStandardStreams } from "./module.js";
 import {
   loadScript,
   initializePackageIndex,
@@ -64,7 +64,14 @@ Module.fatal_error = function (e) {
     "Pyodide has suffered a fatal error. Please report this to the Pyodide maintainers."
   );
   console.error("The cause of the fatal error was:");
-  console.error(e);
+  if (Module.inTestHoist) {
+    // Test hoist won't print the error object in a useful way so convert it to
+    // string.
+    console.error(e.toString());
+    console.error(e.stack);
+  } else {
+    console.error(e);
+  }
   try {
     Module.dump_traceback();
     for (let key of Object.keys(Module.public_api)) {
@@ -147,12 +154,11 @@ function fixRecursionLimit() {
     recurse();
   } catch (err) {}
 
-  let recursionLimit = Math.min(depth / 50, 400);
+  let recursionLimit = Math.min(depth / 25, 500);
   Module.runPythonSimple(
     `import sys; sys.setrecursionlimit(int(${recursionLimit}))`
   );
 }
-
 /**
  * Load the main Pyodide wasm module and initialize it.
  *
@@ -162,18 +168,28 @@ function fixRecursionLimit() {
  * (This can be fixed once `Firefox adopts support for ES6 modules in webworkers
  * <https://bugzilla.mozilla.org/show_bug.cgi?id=1247687>`_.)
  *
- * @param {{ indexURL : string, fullStdLib? : boolean = true }} config
+ * @param {{ indexURL : string, fullStdLib? : boolean = true, stdin?: () => string, stdout?: (text: string) => void, stderr?: (text: string) => void }} config
  * @param {string} config.indexURL - The URL from which Pyodide will load
  * packages
  * @param {boolean} config.fullStdLib - Load the full Python standard library.
  * Setting this to false excludes following modules: distutils.
  * Default: true
+ * @param {undefined | (() => string)} config.stdin - Override the standard input callback. Should ask the user for one line of input.
+ * Default: undefined
+ * @param {undefined | ((text: string) => void)} config.stdout - Override the standard output callback.
+ * Default: undefined
+ * @param {undefined | ((text: string) => void)} config.stderr - Override the standard error output callback.
+ * Default: undefined
  * @returns The :ref:`js-api-pyodide` module.
  * @memberof globalThis
  * @async
  */
 export async function loadPyodide(config) {
-  const default_config = { fullStdLib: true, jsglobals: globalThis };
+  const default_config = {
+    fullStdLib: true,
+    jsglobals: globalThis,
+    stdin: globalThis.prompt ? globalThis.prompt : undefined,
+  };
   config = Object.assign(default_config, config);
   if (globalThis.__pyodide_module) {
     if (globalThis.languagePluginURL) {
@@ -197,6 +213,8 @@ export async function loadPyodide(config) {
   }
   Module.indexURL = baseURL;
   let packageIndexReady = initializePackageIndex(baseURL);
+
+  setStandardStreams(config.stdin, config.stdout, config.stderr);
 
   Module.locateFile = (path) => baseURL + path;
   let moduleLoaded = new Promise((r) => (Module.postRun = r));
